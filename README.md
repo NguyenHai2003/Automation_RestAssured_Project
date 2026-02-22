@@ -48,4 +48,29 @@ Sau khi chạy test xong, bạn có thể xem báo cáo bằng lệnh sau tại 
 allure serve target/allure-results
 ```
 
-*(Lưu ý: Bạn cần cài đặt Allure commandline trên máy để chạy lệnh này)*
+_(Lưu ý: Bạn cần cài đặt Allure commandline trên máy để chạy lệnh này)_
+
+## Environment Config (chuẩn hóa)
+
+- File chung: `src/test/resources/config/configs.properties`
+- File theo môi trường:
+  - `src/test/resources/config/configs-dev.properties`
+  - `src/test/resources/config/configs-qa.properties`
+
+Chạy theo môi trường bằng Maven:
+
+```bash
+mvn clean test -Denv=qa
+```
+
+Nếu không truyền `-Denv`, framework mặc định dùng `dev`.
+
+## Domain Pattern
+
+Framework được tách theo domain `client/service/assertion`:
+
+- `domain/auth/*`
+- `domain/booking/*`
+- `domain/user/*`
+
+`Token` được quản lý bằng `ThreadLocal` để an toàn khi chạy song song.

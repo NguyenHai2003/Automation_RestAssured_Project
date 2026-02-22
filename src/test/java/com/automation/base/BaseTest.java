@@ -1,6 +1,7 @@
 package com.automation.base;
 
 import com.automation.globals.ConfigsGlobal;
+import com.automation.globals.TokenContext;
 import com.automation.helpers.PropertiesHelpers;
 import com.automation.listeners.TestListener;
 import com.automation.utils.LogUtils;
@@ -17,6 +18,7 @@ public class BaseTest {
     public void beforeSuite() {
         LogUtils.info("Initializing Automation Framework");
         PropertiesHelpers.loadAllFiles();
+        LogUtils.info("Active Environment: " + ConfigsGlobal.ENV);
         RestAssured.baseURI = ConfigsGlobal.BASE_URI;
         RestAssured.basePath = ConfigsGlobal.BASE_PATH;
         LogUtils.info("Base URI: " + RestAssured.baseURI);
@@ -25,7 +27,13 @@ public class BaseTest {
 
     @BeforeMethod
     public void beforeMethod() {
+        TokenContext.clear();
         LogUtils.info("Starting Test Method");
+    }
+
+    @org.testng.annotations.AfterMethod
+    public void afterMethod() {
+        TokenContext.clear();
     }
 
     @AfterSuite

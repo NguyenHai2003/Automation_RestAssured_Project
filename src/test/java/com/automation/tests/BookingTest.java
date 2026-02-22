@@ -1,82 +1,68 @@
 package com.automation.tests;
 
 import com.automation.base.BaseTest;
-import com.automation.constants.EndPointGlobal;
-import com.automation.keywords.ApiKeyword;
-import com.automation.keywords.Authentication;
+import com.automation.domain.auth.service.AuthService;
+import com.automation.domain.booking.assertion.BookingAssertions;
+import com.automation.domain.booking.service.BookingService;
 import com.automation.models.booking.BookingRequest;
 import com.automation.models.booking.BookingResponse;
 import com.automation.utils.LogUtils;
-import io.restassured.module.jsv.JsonSchemaValidator;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.restassured.response.Response;
-import org.testng.Assert;
-import org.testng.annotations.BeforeClass;
+import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
 import java.io.File;
-
-import static org.hamcrest.Matchers.equalTo;
+import java.io.IOException;
+import java.util.List;
 
 public class BookingTest extends BaseTest {
 
-    private int bookingId;
-    private BookingRequest bookingRequest;
+    private final BookingService bookingService = new BookingService();
+    private final AuthService authService = new AuthService();
+    private static final String BOOKING_DATA_PATH = "src/test/resources/testdata/booking-requests.json";
+    private static final File BOOKING_SCHEMA_FILE = new File("src/test/resources/schemas/booking_schema.json");
 
-    @BeforeClass
-    public void setup() {
-        Authentication.login();
-        bookingRequest = BookingRequest.builder()
-                .firstname("Jim")
-                .lastname("Brown")
-                .totalprice(111)
-                .depositpaid(true)
-                .bookingdates(BookingRequest.BookingDates.builder()
-                        .checkin("2023-01-01")
-                        .checkout("2023-01-02")
-                        .build())
-                .additionalneeds("Breakfast")
-                .build();
+    @DataProvider(name = "bookingData")
+    public Object[][] bookingData() {
+        List<BookingRequest> bookingRequests = loadBookingRequests(BOOKING_DATA_PATH);
+        Object[][] data = new Object[bookingRequests.size()][1];
+        for (int i = 0; i < bookingRequests.size(); i++) {
+            data[i][0] = bookingRequests.get(i);
+        }
+        return data;
     }
 
-    @Test(priority = 1)
-    public void createBooking() {
-        LogUtils.info("Test: Create Booking");
-        Response response = ApiKeyword.post(EndPointGlobal.BOOKING, bookingRequest);
-        response.then().statusCode(200);
-        response.then().body(JsonSchemaValidator.matchesJsonSchema(new File("src/test/resources/schemas/booking_schema.json")));
+    @Test(dataProvider = "bookingData")
+    public void bookingCrudFlow(BookingRequest bookingRequest) {
+        LogUtils.info("Test: Booking CRUD flow for " + bookingRequest.getFirstname() + " " + bookingRequest.getLastname());
 
-        BookingResponse bookingResponse = response.as(BookingResponse.class);
-        bookingId = bookingResponse.getBookingid();
-        
-        Assert.assertEquals(bookingResponse.getBooking().getFirstname(), bookingRequest.getFirstname());
-        LogUtils.info("Created Booking ID: " + bookingId);
+        authService.loginWithDefaultCredentials();
+
+        Response createResponse = bookingService.createBooking(bookingRequest);
+        BookingResponse bookingResponse = BookingAssertions.assertCreateBookingSuccess(createResponse, bookingRequest, BOOKING_SCHEMA_FILE);
+        int bookingId = bookingResponse.getBookingid();
+
+        Response getResponse = bookingService.getBooking(bookingId);
+        BookingAssertions.assertGetBookingSuccess(getResponse, bookingRequest);
+
+        String updatedFirstName = bookingRequest.getFirstname() + "_Updated";
+        bookingRequest.setFirstname(updatedFirstName);
+        Response updateResponse = bookingService.updateBooking(bookingId, bookingRequest);
+        BookingAssertions.assertUpdateBookingSuccess(updateResponse, updatedFirstName);
+
+        Response deleteResponse = bookingService.deleteBooking(bookingId);
+        BookingAssertions.assertDeleteBookingSuccess(deleteResponse);
     }
 
-    @Test(priority = 2)
-    public void getBooking() {
-        LogUtils.info("Test: Get Booking " + bookingId);
-        Response response = ApiKeyword.get(EndPointGlobal.BOOKING + "/" + bookingId);
-        response.then().statusCode(200)
-                .body("firstname", equalTo(bookingRequest.getFirstname()))
-                .body("lastname", equalTo(bookingRequest.getLastname()));
-    }
-
-    @Test(priority = 3)
-    public void updateBooking() {
-        LogUtils.info("Test: Update Booking " + bookingId);
-        bookingRequest.setFirstname("James");
-        
-        // Auth is handled automatically by ApiKeyword.put
-        Response response = ApiKeyword.put(EndPointGlobal.BOOKING + "/" + bookingId, bookingRequest);
-        response.then().statusCode(200)
-                .body("firstname", equalTo("James"));
-    }
-
-    @Test(priority = 4)
-    public void deleteBooking() {
-        LogUtils.info("Test: Delete Booking " + bookingId);
-        // Auth is handled automatically by ApiKeyword.delete
-        Response response = ApiKeyword.delete(EndPointGlobal.BOOKING + "/" + bookingId);
-        response.then().statusCode(201);
+    private List<BookingRequest> loadBookingRequests(String relativePath) {
+        ObjectMapper objectMapper = new ObjectMapper();
+        try {
+            return objectMapper.readValue(new File(relativePath), new TypeReference<List<BookingRequest>>() {
+            });
+        } catch (IOException exception) {
+            throw new RuntimeException("Cannot load booking test data from: " + relativePath, exception);
+        }
     }
 }
